@@ -3,33 +3,22 @@
 // Movies/Shows/K-Drama: OMDB API
 
 const OMDB_KEY = "68efe870";
-const JIKAN_BASE = "https://api.jikan.moe/v4";
 const OMDB = "https://www.omdbapi.com";
 
-// ─── Fast Jikan fetch — direct call, single proxy fallback ───
+// ─── Jikan fetch via our own Vercel proxy ─────────────────────
+// Calls /api/jikan?path=... which is our serverless function
+// This avoids all CORS issues since it runs server-side
 async function jikanFetch(path) {
-  // Try direct first (fast on Vercel)
   try {
-    const res = await fetch(`${JIKAN_BASE}${path}`, {
-      headers: { "Accept": "application/json" },
-      signal: AbortSignal.timeout(5000), // 5s timeout
-    });
+    const url = `/api/jikan?path=${encodeURIComponent(path)}`;
+    const res = await fetch(url);
     if (res.ok) {
       const json = await res.json();
       if (json.data) return json.data;
     }
-  } catch (e) {}
-
-  // Single fallback proxy
-  try {
-    const url = `https://api.allorigins.win/raw?url=${encodeURIComponent(JIKAN_BASE + path)}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-    if (res.ok) {
-      const json = await res.json();
-      if (json.data) return json.data;
-    }
-  } catch (e) {}
-
+  } catch (e) {
+    console.error("Jikan proxy error:", e);
+  }
   return [];
 }
 
