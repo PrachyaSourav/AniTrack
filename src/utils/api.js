@@ -6,8 +6,9 @@ const OMDB_KEY = "68efe870";
 const JIKAN_BASE = "https://api.jikan.moe/v4";
 const OMDB = "https://www.omdbapi.com";
 
-const CORS = "https://corsproxy.io/?";
-const jikan = (path) => `${CORS}${encodeURIComponent(JIKAN_BASE + path)}`;
+// Direct Jikan call — works on deployed site (Vercel)
+// For local dev, if you get CORS errors, use a browser extension like "CORS Unblock"
+const jikan = (path) => `${JIKAN_BASE}${path}`;
 
 // ─── Normalizers ─────────────────────────────────────────────
 
