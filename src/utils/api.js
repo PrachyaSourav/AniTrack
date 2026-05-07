@@ -6,8 +6,7 @@ const OMDB_KEY = "68efe870";
 const JIKAN_BASE = "https://api.jikan.moe/v4";
 const OMDB = "https://www.omdbapi.com";
 
-// Direct Jikan call — works on deployed site (Vercel)
-// For local dev, if you get CORS errors, use a browser extension like "CORS Unblock"
+// Smart Jikan caller — tries direct first, falls back to proxy
 const jikan = (path) => `${JIKAN_BASE}${path}`;
 
 // ─── Normalizers ─────────────────────────────────────────────
@@ -118,9 +117,22 @@ function getReadLinks(title, type) {
 // ─── Jikan fetchers ───────────────────────────────────────────
 
 async function jikanFetch(path) {
-  const res = await fetch(jikan(path));
-  const json = await res.json();
-  return json.data || [];
+  const urls = [
+    `${JIKAN_BASE}${path}`,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(JIKAN_BASE + path)}`,
+    `https://corsproxy.io/?${encodeURIComponent(JIKAN_BASE + path)}`,
+  ];
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, { headers: { "Accept": "application/json" } });
+      if (!res.ok) continue;
+      const json = await res.json();
+      if (json.data) return json.data;
+    } catch (e) {
+      continue;
+    }
+  }
+  return [];
 }
 
 async function searchAnime(query) {
