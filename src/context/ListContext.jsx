@@ -1,118 +1,112 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { supabase } from "../utils/supabase";
+import { useAuth } from "./AuthContext";
 
 const ListContext = createContext(null);
 
-// Demo seed data so the app feels alive on first load
-const SEED = [
-  {
-    id: 1,
-    title: "Attack on Titan",
-    type: "Anime",
-    status: "Completed",
-    progress: 87,
-    total: 87,
-    rating: 9.5,
-    note: "Incredible ending arc. A modern masterpiece.",
-    img: "https://cdn.myanimelist.net/images/anime/10/47347.jpg",
-    addedAt: Date.now() - 86400000 * 5,
-  },
-  {
-    id: 2,
-    title: "Berserk",
-    type: "Manga",
-    status: "Watching",
-    progress: 210,
-    total: 364,
-    rating: 9,
-    note: "Peak dark fantasy. Gut's journey is unmatched.",
-    img: "https://cdn.myanimelist.net/images/manga/1/157897.jpg",
-    addedAt: Date.now() - 86400000 * 3,
-  },
-  {
-    id: 3,
-    title: "Demon Slayer",
-    type: "Anime",
-    status: "Completed",
-    progress: 44,
-    total: 44,
-    rating: 8.5,
-    note: "Stunning animation, especially in Mugen Train.",
-    img: "https://cdn.myanimelist.net/images/anime/1286/99889.jpg",
-    addedAt: Date.now() - 86400000 * 7,
-  },
-  {
-    id: 4,
-    title: "Solo Leveling",
-    type: "Manhwa",
-    status: "Completed",
-    progress: 179,
-    total: 179,
-    rating: 8,
-    note: "Great power fantasy. Art is top tier.",
-    img: "https://cdn.myanimelist.net/images/manga/3/222295.jpg",
-    addedAt: Date.now() - 86400000 * 10,
-  },
-  {
-    id: 5,
-    title: "One Piece",
-    type: "Anime",
-    status: "Watching",
-    progress: 1100,
-    total: 0,
-    rating: 9,
-    note: "The journey IS the destination.",
-    img: "https://cdn.myanimelist.net/images/anime/6/73245.jpg",
-    addedAt: Date.now() - 86400000 * 1,
-  },
-  {
-    id: 6,
-    title: "Vinland Saga",
-    type: "Anime",
-    status: "Plan to Watch",
-    progress: 0,
-    total: 48,
-    rating: 0,
-    note: "",
-    img: "https://cdn.myanimelist.net/images/anime/1500/103005.jpg",
-    addedAt: Date.now() - 86400000 * 2,
-  },
-];
-
 export function ListProvider({ children }) {
-  const [list, setList] = useState(() => {
-    try {
-      const saved = localStorage.getItem("anitrack_list");
-      return saved ? JSON.parse(saved) : SEED;
-    } catch {
-      return SEED;
-    }
+  const { user } = useAuth();
+  const [list, setList] = useState([]);
+  const [loadingList, setLoadingList] = useState(false);
+
+  // Convert Supabase row → app format
+  const fromDb = (row) => ({
+    id: row.media_id,
+    dbId: row.id,
+    title: row.title,
+    type: row.type,
+    img: row.img,
+    status: row.status,
+    progress: row.progress,
+    total: row.total,
+    rating: row.rating,
+    note: row.note,
+    addedAt: new Date(row.added_at).getTime(),
   });
 
-  // Persist to localStorage whenever list changes
-  useEffect(() => {
-    localStorage.setItem("anitrack_list", JSON.stringify(list));
-  }, [list]);
+  // Fetch list from Supabase
+  const fetchList = useCallback(async () => {
+    if (!user) { setList([]); return; }
+    setLoadingList(true);
+    const { data, error } = await supabase
+      .from("media_list")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("added_at", { ascending: false });
+    if (!error && data) setList(data.map(fromDb));
+    setLoadingList(false);
+  }, [user]);
 
-  const addOrUpdate = (entry) => {
-    setList((prev) => {
-      const idx = prev.findIndex((x) => x.id === entry.id);
-      if (idx >= 0) {
-        const next = [...prev];
-        next[idx] = { ...entry, updatedAt: Date.now() };
-        return next;
+  useEffect(() => {
+    fetchList();
+  }, [fetchList]);
+
+  const addOrUpdate = async (entry) => {
+    if (!user) return;
+    const existing = list.find((x) => x.id === entry.id);
+
+    if (existing?.dbId) {
+      const { error } = await supabase
+        .from("media_list")
+        .update({
+          status: entry.status,
+          progress: entry.progress,
+          total: entry.total,
+          rating: entry.rating,
+          note: entry.note,
+          img: entry.img,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existing.dbId);
+
+      if (!error) {
+        setList((prev) =>
+          prev.map((x) =>
+            x.id === entry.id ? { ...x, ...entry, dbId: existing.dbId } : x
+          )
+        );
       }
-      return [{ ...entry, addedAt: Date.now() }, ...prev];
-    });
+      return { error };
+    } else {
+      const { data, error } = await supabase
+        .from("media_list")
+        .insert({
+          user_id: user.id,
+          media_id: entry.id,
+          title: entry.title,
+          type: entry.type,
+          img: entry.img || "",
+          status: entry.status,
+          progress: entry.progress || 0,
+          total: entry.total || 0,
+          rating: entry.rating || 0,
+          note: entry.note || "",
+        })
+        .select()
+        .single();
+
+      if (!error && data) {
+        setList((prev) => [fromDb(data), ...prev]);
+      }
+      return { error };
+    }
   };
 
-  const remove = (id) => {
-    setList((prev) => prev.filter((x) => x.id !== id));
+  const remove = async (id) => {
+    if (!user) return;
+    const existing = list.find((x) => x.id === id);
+    if (!existing?.dbId) return;
+    const { error } = await supabase
+      .from("media_list")
+      .delete()
+      .eq("id", existing.dbId);
+    if (!error) setList((prev) => prev.filter((x) => x.id !== id));
   };
 
   const getItem = (id) => list.find((x) => x.id === id) || null;
 
   return (
-    <ListContext.Provider value={{ list, addOrUpdate, remove, getItem }}>
+    <ListContext.Provider value={{ list, loadingList, addOrUpdate, remove, getItem, fetchList }}>
       {children}
     </ListContext.Provider>
   );

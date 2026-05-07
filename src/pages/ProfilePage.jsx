@@ -1,5 +1,6 @@
 import React from "react";
 import { useList } from "../context/ListContext";
+import { useAuth } from "../context/AuthContext";
 
 function PhaseCard({ phase, title, done, items }) {
   return (
@@ -24,6 +25,8 @@ function PhaseCard({ phase, title, done, items }) {
 
 export default function ProfilePage() {
   const { list } = useList();
+  const { user, signOut } = useAuth();
+  const avatar = user?.email?.[0]?.toUpperCase() || "U";
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8 fade-up">
@@ -40,15 +43,14 @@ export default function ProfilePage() {
       <div className="panel flex items-center gap-5 mb-6">
         <div className="w-16 h-16 rounded-full bg-accent/20 flex items-center justify-center text-2xl font-bold text-accent flex-shrink-0"
              style={{ fontFamily: "'Syne', sans-serif" }}>
-          U
+          {avatar}
         </div>
-        <div>
-          <p className="font-semibold text-white text-lg">User</p>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-white text-lg truncate">{user?.email}</p>
           <p className="text-sm text-white/40">Tracking {list.length} item{list.length !== 1 ? "s" : ""}</p>
-          <p className="text-xs text-white/25 mt-1">
-            🔒 Phase 2 will add real login — your list is saved locally for now
-          </p>
+          <p className="text-xs text-accent/60 mt-1">☁️ List synced to cloud</p>
         </div>
+        <button onClick={signOut} className="btn-danger flex-shrink-0">Sign out</button>
       </div>
 
       {/* Roadmap */}
@@ -69,22 +71,24 @@ export default function ProfilePage() {
         />
         <PhaseCard
           phase={2}
+          done
           title="Authentication + Database"
           items={[
-            "Supabase project setup (free)",
+            "Supabase project setup",
             "Email/password sign up & login",
-            "Store list in Supabase database",
-            "Sync across devices",
+            "List stored in Supabase database",
+            "Synced across devices",
           ]}
         />
         <PhaseCard
           phase={3}
+          done
           title="Live API Search"
           items={[
-            "Jikan API for anime & manga",
-            "TMDB API for movies & TV shows",
+            "Jikan API for anime, manga, manhwa, manhua",
+            "OMDB API for movies & TV shows",
             "Real cover images & metadata",
-            "Replace mock data with live results",
+            "Debounced live search as you type",
           ]}
         />
         <PhaseCard
