@@ -1,56 +1,91 @@
 // Phase 3+ — Live API search
-// Anime/Manga/Manhwa/Manhua/Donghua/Novels: Jikan API (jikan.moe) — free, no key
-// Movies/Shows/K-Drama/Anime Films: OMDB API — free key
+// Anime/Manga/Manhwa/Manhua/Donghua/Novels: Jikan API (jikan.moe)
+// Movies/Shows/K-Drama: OMDB API
 
 const OMDB_KEY = "68efe870";
 const JIKAN_BASE = "https://api.jikan.moe/v4";
 const OMDB = "https://www.omdbapi.com";
 
-// Smart Jikan caller — tries direct first, falls back to proxy
-const jikan = (path) => `${JIKAN_BASE}${path}`;
+// ─── Fast Jikan fetch — direct call, single proxy fallback ───
+async function jikanFetch(path) {
+  // Try direct first (fast on Vercel)
+  try {
+    const res = await fetch(`${JIKAN_BASE}${path}`, {
+      headers: { "Accept": "application/json" },
+      signal: AbortSignal.timeout(5000), // 5s timeout
+    });
+    if (res.ok) {
+      const json = await res.json();
+      if (json.data) return json.data;
+    }
+  } catch (e) {}
+
+  // Single fallback proxy
+  try {
+    const url = `https://api.allorigins.win/raw?url=${encodeURIComponent(JIKAN_BASE + path)}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (res.ok) {
+      const json = await res.json();
+      if (json.data) return json.data;
+    }
+  } catch (e) {}
+
+  return [];
+}
+
+// ─── ID helpers — ensure no collisions between types ─────────
+// Each type gets its own ID range so manga/manhwa/manhua never clash
+const ID_OFFSET = {
+  Anime:         0,
+  Manga:         0,
+  Manhwa:        100000,
+  Manhua:        200000,
+  "Light Novel": 300000,
+  "Web Novel":   400000,
+  Donghua:       500000,
+};
 
 // ─── Normalizers ─────────────────────────────────────────────
 
 function fromJikanAnime(item, typeOverride) {
+  const type = typeOverride || "Anime";
   return {
-    id: item.mal_id + (typeOverride === "Donghua" ? 500000 : 0),
+    id: item.mal_id + (ID_OFFSET[type] || 0),
     malId: item.mal_id,
     title: item.title_english || item.title,
-    type: typeOverride || "Anime",
+    type,
     score: item.score || 0,
     episodes: item.episodes || 0,
     year: item.year || item.aired?.prop?.from?.year || null,
     img: item.images?.jpg?.large_image_url || item.images?.jpg?.image_url || "",
     genres: item.genres?.map((g) => g.name) || [],
-    streamLinks: getAnimeStreamLinks(item.title_english || item.title),
+    streamLinks: getAnimeStreamLinks(item.title_english || item.title, type),
   };
 }
 
-function fromJikanManga(item, typeOverride) {
-  const offset = { Manhwa: 100000, Manhua: 200000, "Light Novel": 300000, "Web Novel": 400000 };
+function fromJikanManga(item, type) {
   return {
-    id: item.mal_id + (offset[typeOverride] || 0),
+    id: item.mal_id + (ID_OFFSET[type] || 0),
     malId: item.mal_id,
     title: item.title_english || item.title,
-    type: typeOverride || "Manga",
+    type,
     score: item.score || 0,
     episodes: item.chapters || 0,
     year: item.published?.prop?.from?.year || null,
     img: item.images?.jpg?.large_image_url || item.images?.jpg?.image_url || "",
     genres: item.genres?.map((g) => g.name) || [],
-    streamLinks: getReadLinks(item.title_english || item.title, typeOverride),
+    streamLinks: getReadLinks(item.title_english || item.title, type),
   };
 }
 
 function fromOmdb(item, type) {
-  // Only use poster if it's a real URL (not N/A or missing)
   const poster = item.Poster && item.Poster !== "N/A" && item.Poster.startsWith("http")
     ? item.Poster : "";
   return {
     id: parseInt(item.imdbID?.replace("tt", "") || Math.random() * 999999),
     imdbId: item.imdbID,
     title: item.Title,
-    type: type,
+    type,
     score: item.imdbRating && item.imdbRating !== "N/A" ? parseFloat(item.imdbRating) : 0,
     episodes: item.totalSeasons ? parseInt(item.totalSeasons) * 10 : 1,
     year: item.Year ? parseInt(item.Year) : null,
@@ -64,8 +99,13 @@ function fromOmdb(item, type) {
 
 // ─── Stream / Read Link Generators ───────────────────────────
 
-function getAnimeStreamLinks(title) {
+function getAnimeStreamLinks(title, type) {
   const q = encodeURIComponent(title || "");
+  if (type === "Donghua") return [
+    { name: "Bilibili", url: `https://www.bilibili.tv/en/search?keyword=${q}`, icon: "🩵" },
+    { name: "WeTV", url: `https://wetv.vip/en/search?query=${q}`, icon: "🟩" },
+    { name: "Netflix", url: `https://www.netflix.com/search?q=${q}`, icon: "🔴" },
+  ];
   return [
     { name: "Crunchyroll", url: `https://www.crunchyroll.com/search?q=${q}`, icon: "🟠" },
     { name: "Funimation", url: `https://www.funimation.com/search/?q=${q}`, icon: "🟣" },
@@ -74,39 +114,14 @@ function getAnimeStreamLinks(title) {
   ];
 }
 
-function getStreamLinks(title, type) {
-  const q = encodeURIComponent(title || "");
-  const links = [
-    { name: "Netflix", url: `https://www.netflix.com/search?q=${q}`, icon: "🔴" },
-    { name: "Prime Video", url: `https://www.amazon.com/s?k=${q}&i=instant-video`, icon: "🔵" },
-    { name: "Hulu", url: `https://www.hulu.com/search?q=${q}`, icon: "🟢" },
-    { name: "Disney+", url: `https://www.disneyplus.com/search/${q}`, icon: "🔷" },
-  ];
-  if (type === "K-Drama") {
-    links.unshift(
-      { name: "Viki", url: `https://www.viki.com/search?q=${q}`, icon: "🟡" },
-      { name: "Kocowa", url: `https://www.kocowa.com/search?q=${q}`, icon: "🟤" }
-    );
-  }
-  if (type === "Donghua") {
-    links.unshift(
-      { name: "Bilibili", url: `https://www.bilibili.tv/en/search?keyword=${q}`, icon: "🩵" },
-      { name: "WeTV", url: `https://wetv.vip/en/search?query=${q}`, icon: "🟩" }
-    );
-  }
-  return links;
-}
-
 function getReadLinks(title, type) {
   const q = encodeURIComponent(title || "");
-  if (type === "Light Novel" || type === "Web Novel") {
-    return [
-      { name: "NovelUpdates", url: `https://www.novelupdates.com/?s=${q}`, icon: "📖" },
-      { name: "Royal Road", url: `https://www.royalroad.com/fictions/search?title=${q}`, icon: "👑" },
-      { name: "Wuxiaworld", url: `https://www.wuxiaworld.com/search?query=${q}`, icon: "🐉" },
-      { name: "Webnovel", url: `https://www.webnovel.com/search?keywords=${q}`, icon: "✍️" },
-    ];
-  }
+  if (type === "Light Novel" || type === "Web Novel") return [
+    { name: "NovelUpdates", url: `https://www.novelupdates.com/?s=${q}`, icon: "📖" },
+    { name: "Royal Road", url: `https://www.royalroad.com/fictions/search?title=${q}`, icon: "👑" },
+    { name: "Wuxiaworld", url: `https://www.wuxiaworld.com/search?query=${q}`, icon: "🐉" },
+    { name: "Webnovel", url: `https://www.webnovel.com/search?keywords=${q}`, icon: "✍️" },
+  ];
   return [
     { name: "MangaDex", url: `https://mangadex.org/search?q=${q}`, icon: "🟠" },
     { name: "MangaPlus", url: `https://mangaplus.shueisha.co.jp/search_result?keyword=${q}`, icon: "🔴" },
@@ -114,85 +129,102 @@ function getReadLinks(title, type) {
   ];
 }
 
-// ─── Jikan fetchers ───────────────────────────────────────────
-
-async function jikanFetch(path) {
-  const urls = [
-    `${JIKAN_BASE}${path}`,
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(JIKAN_BASE + path)}`,
-    `https://corsproxy.io/?${encodeURIComponent(JIKAN_BASE + path)}`,
+function getStreamLinks(title, type) {
+  const q = encodeURIComponent(title || "");
+  const base = [
+    { name: "Netflix", url: `https://www.netflix.com/search?q=${q}`, icon: "🔴" },
+    { name: "Prime Video", url: `https://www.amazon.com/s?k=${q}&i=instant-video`, icon: "🔵" },
+    { name: "Hulu", url: `https://www.hulu.com/search?q=${q}`, icon: "🟢" },
+    { name: "Disney+", url: `https://www.disneyplus.com/search/${q}`, icon: "🔷" },
   ];
-  for (const url of urls) {
-    try {
-      const res = await fetch(url, { headers: { "Accept": "application/json" } });
-      if (!res.ok) continue;
-      const json = await res.json();
-      if (json.data) return json.data;
-    } catch (e) {
-      continue;
-    }
-  }
-  return [];
+  if (type === "K-Drama") return [
+    { name: "Viki", url: `https://www.viki.com/search?q=${q}`, icon: "🟡" },
+    { name: "Kocowa", url: `https://www.kocowa.com/search?q=${q}`, icon: "🟤" },
+    ...base,
+  ];
+  return base;
 }
+
+// ─── Jikan search functions ───────────────────────────────────
 
 async function searchAnime(query) {
   try {
-    const path = query.trim() ? `/anime?q=${encodeURIComponent(query)}&limit=12&sfw=true` : `/top/anime?limit=12`;
+    const path = query.trim()
+      ? `/anime?q=${encodeURIComponent(query)}&limit=15&sfw=true`
+      : `/top/anime?limit=15`;
     return (await jikanFetch(path)).map((x) => fromJikanAnime(x, "Anime"));
-  } catch (e) { console.error(e); return []; }
+  } catch (e) { return []; }
 }
 
 async function searchDonghua(query) {
   try {
-    // Donghua = Chinese animation — search anime with Chinese keywords
-    const q = query.trim() ? query : "chinese animation";
-    const path = `/anime?q=${encodeURIComponent(q)}&limit=12&sfw=true`;
-    const data = await jikanFetch(path);
-    return data.map((x) => fromJikanAnime(x, "Donghua"));
-  } catch (e) { console.error(e); return []; }
+    const q = query.trim() || "chinese";
+    const path = `/anime?q=${encodeURIComponent(q)}&limit=15&sfw=true`;
+    return (await jikanFetch(path)).map((x) => fromJikanAnime(x, "Donghua"));
+  } catch (e) { return []; }
 }
 
 async function searchManga(query) {
   try {
-    const path = query.trim() ? `/manga?q=${encodeURIComponent(query)}&limit=12&type=manga` : `/top/manga?limit=12&type=manga`;
-    return (await jikanFetch(path)).map((x) => fromJikanManga(x, "Manga"));
-  } catch (e) { console.error(e); return []; }
+    const path = query.trim()
+      ? `/manga?q=${encodeURIComponent(query)}&limit=15&type=manga`
+      : `/top/manga?limit=15&type=manga`;
+    const data = await jikanFetch(path);
+    // Strictly filter to manga type only
+    return data
+      .filter((x) => !x.type || x.type === "Manga")
+      .map((x) => fromJikanManga(x, "Manga"));
+  } catch (e) { return []; }
 }
 
 async function searchManhwa(query) {
   try {
-    const path = query.trim() ? `/manga?q=${encodeURIComponent(query)}&limit=12&type=manhwa` : `/top/manga?limit=12&type=manhwa`;
-    return (await jikanFetch(path)).map((x) => fromJikanManga(x, "Manhwa"));
-  } catch (e) { console.error(e); return []; }
+    const path = query.trim()
+      ? `/manga?q=${encodeURIComponent(query)}&limit=15&type=manhwa`
+      : `/top/manga?limit=15&type=manhwa`;
+    const data = await jikanFetch(path);
+    return data
+      .filter((x) => !x.type || x.type === "Manhwa")
+      .map((x) => fromJikanManga(x, "Manhwa"));
+  } catch (e) { return []; }
 }
 
 async function searchManhua(query) {
   try {
-    const path = query.trim() ? `/manga?q=${encodeURIComponent(query)}&limit=12&type=manhua` : `/top/manga?limit=12&type=manhua`;
-    return (await jikanFetch(path)).map((x) => fromJikanManga(x, "Manhua"));
-  } catch (e) { console.error(e); return []; }
+    const path = query.trim()
+      ? `/manga?q=${encodeURIComponent(query)}&limit=15&type=manhua`
+      : `/top/manga?limit=15&type=manhua`;
+    const data = await jikanFetch(path);
+    return data
+      .filter((x) => !x.type || x.type === "Manhua")
+      .map((x) => fromJikanManga(x, "Manhua"));
+  } catch (e) { return []; }
 }
 
 async function searchLightNovel(query) {
   try {
-    const path = query.trim() ? `/manga?q=${encodeURIComponent(query)}&limit=12&type=lightnovel` : `/top/manga?limit=12&type=lightnovel`;
+    const path = query.trim()
+      ? `/manga?q=${encodeURIComponent(query)}&limit=15&type=lightnovel`
+      : `/top/manga?limit=15&type=lightnovel`;
     return (await jikanFetch(path)).map((x) => fromJikanManga(x, "Light Novel"));
-  } catch (e) { console.error(e); return []; }
+  } catch (e) { return []; }
 }
 
 async function searchWebNovel(query) {
   try {
-    const q = query.trim() || "novel";
-    const path = `/manga?q=${encodeURIComponent(q)}&limit=12&type=novel`;
+    // Web novels on MAL are listed as "Novel" type
+    const path = query.trim()
+      ? `/manga?q=${encodeURIComponent(query)}&limit=15&type=novel`
+      : `/top/manga?limit=15&type=novel`;
     return (await jikanFetch(path)).map((x) => fromJikanManga(x, "Web Novel"));
-  } catch (e) { console.error(e); return []; }
+  } catch (e) { return []; }
 }
 
-// ─── OMDB fetchers ────────────────────────────────────────────
+// ─── OMDB search functions ────────────────────────────────────
 
-async function omdbSearch(query, omdbType, appType, fallbackQuery) {
+async function omdbSearch(query, omdbType, appType, fallback) {
   try {
-    const q = query.trim() || fallbackQuery;
+    const q = query.trim() || fallback;
     const res = await fetch(`${OMDB}/?apikey=${OMDB_KEY}&s=${encodeURIComponent(q)}&type=${omdbType}`);
     const json = await res.json();
     if (json.Response === "False") return [];
@@ -208,11 +240,11 @@ async function omdbSearch(query, omdbType, appType, fallbackQuery) {
         return d.Response !== "False" && d.Poster && d.Poster !== "N/A" && d.Poster.startsWith("http");
       })
       .map((r) => fromOmdb(r.value, appType));
-  } catch (e) { console.error(e); return []; }
+  } catch (e) { return []; }
 }
 
 async function searchKDrama(query) {
-  const DEFAULTS = ["Squid Game", "Crash Landing on You", "Guardian Lonely Great God", "Itaewon Class", "My Love from the Star", "Descendants of the Sun", "Vincenzo"];
+  const DEFAULTS = ["Squid Game", "Crash Landing on You", "Guardian Lonely Great God", "Vincenzo", "Descendants of the Sun", "My Love from the Star", "Itaewon Class"];
   try {
     const searches = query.trim() ? [query] : DEFAULTS;
     const allResults = await Promise.allSettled(
@@ -238,47 +270,44 @@ async function searchKDrama(query) {
         if (r.status !== "fulfilled") return false;
         const d = r.value;
         if (d.Response === "False") return false;
-        // When user types a specific query, trust the result (don't over-filter)
-        // Only apply Korean filter for default/broad searches
         const hasPoster = d.Poster && d.Poster !== "N/A" && d.Poster.startsWith("http");
         if (!hasPoster) return false;
-        if (query.trim()) return true; // user searched specifically — trust OMDB
-        const isKorean = d.Country?.includes("South Korea") || d.Language?.includes("Korean");
-        return isKorean;
+        if (query.trim()) return true;
+        return d.Country?.includes("South Korea") || d.Language?.includes("Korean");
       })
       .map((r) => fromOmdb(r.value, "K-Drama"));
-  } catch (e) { console.error(e); return []; }
+  } catch (e) { return []; }
 }
 
 // ─── Main export ──────────────────────────────────────────────
 
 export async function searchMedia(query, type) {
   switch (type) {
-    case "anime":       return searchAnime(query);
-    case "manga":       return searchManga(query);
-    case "manhwa":      return searchManhwa(query);
-    case "manhua":      return searchManhua(query);
-    case "donghua":     return searchDonghua(query);
-    case "lightnovel":  return searchLightNovel(query);
-    case "webnovel":    return searchWebNovel(query);
-    case "kdrama":      return searchKDrama(query);
-    case "movie":       return omdbSearch(query, "movie", "Movie", "action");
-    case "show":        return omdbSearch(query, "series", "TV Show", "drama");
-    default:            return [];
+    case "anime":      return searchAnime(query);
+    case "manga":      return searchManga(query);
+    case "manhwa":     return searchManhwa(query);
+    case "manhua":     return searchManhua(query);
+    case "donghua":    return searchDonghua(query);
+    case "lightnovel": return searchLightNovel(query);
+    case "webnovel":   return searchWebNovel(query);
+    case "kdrama":     return searchKDrama(query);
+    case "movie":      return omdbSearch(query, "movie", "Movie", "action");
+    case "show":       return omdbSearch(query, "series", "TV Show", "drama");
+    default:           return [];
   }
 }
 
 export function getAllTypes() {
   return [
-    { value: "anime",      label: "Anime",        emoji: "🎌" },
-    { value: "manga",      label: "Manga",        emoji: "📚" },
-    { value: "manhwa",     label: "Manhwa",       emoji: "🇰🇷" },
-    { value: "manhua",     label: "Manhua",       emoji: "🇨🇳" },
-    { value: "donghua",    label: "Donghua",      emoji: "🐉" },
-    { value: "lightnovel", label: "Light Novel",  emoji: "📖" },
-    { value: "webnovel",   label: "Web Novel",    emoji: "✍️" },
-    { value: "kdrama",     label: "K-Drama",      emoji: "🎭" },
-    { value: "movie",      label: "Movies",       emoji: "🎬" },
-    { value: "show",       label: "TV Shows",     emoji: "📺" },
+    { value: "anime",      label: "Anime",       emoji: "🎌" },
+    { value: "manga",      label: "Manga",       emoji: "📚" },
+    { value: "manhwa",     label: "Manhwa",      emoji: "🇰🇷" },
+    { value: "manhua",     label: "Manhua",      emoji: "🇨🇳" },
+    { value: "donghua",    label: "Donghua",     emoji: "🐉" },
+    { value: "lightnovel", label: "Light Novel", emoji: "📖" },
+    { value: "webnovel",   label: "Web Novel",   emoji: "✍️" },
+    { value: "kdrama",     label: "K-Drama",     emoji: "🎭" },
+    { value: "movie",      label: "Movies",      emoji: "🎬" },
+    { value: "show",       label: "TV Shows",    emoji: "📺" },
   ];
 }
