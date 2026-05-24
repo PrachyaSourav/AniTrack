@@ -10,6 +10,7 @@ import {
   getTrendingMovies, getTrendingShows,
   getWeeklySchedule, getCurrentSeason, DAYS_ORDER,
 } from "../utils/trendingApi";
+
 import { useList } from "../context/ListContext";
 
 // ─── Media Card ───────────────────────────────────────────────
@@ -98,18 +99,35 @@ function ScheduleItem({ item, onAdd }) {
 }
 
 // ─── Grid section ─────────────────────────────────────────────
-function Grid({ items, loading, onAdd }) {
+function Grid({ items, loading, onAdd, onLoadMore, loadingMore }) {
   if (loading) return (
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 stagger">
-      {[...Array(6)].map((_, i) => (
+      {[...Array(12)].map((_, i) => (
         <div key={i}><div className="skeleton aspect-[2/3] rounded-xl mb-2" /><div className="skeleton h-2.5 w-3/4 rounded mb-1" /><div className="skeleton h-2.5 w-1/2 rounded" /></div>
       ))}
     </div>
   );
   if (!items?.length) return <p className="text-white/30 text-sm py-8 text-center">No results found.</p>;
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 stagger">
-      {items.map((item) => <MediaCard key={`${item.type}-${item.id}`} item={item} onAdd={onAdd} />)}
+    <div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 stagger">
+        {items.map((item) => <MediaCard key={`${item.type}-${item.id}`} item={item} onAdd={onAdd} />)}
+      </div>
+      {onLoadMore && (
+        <div className="flex justify-center mt-8">
+          <button
+            onClick={onLoadMore}
+            disabled={loadingMore}
+            className="btn-ghost flex items-center gap-2 disabled:opacity-50"
+          >
+            {loadingMore ? (
+              <><span className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" /> Loading...</>
+            ) : (
+              "Load more →"
+            )}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -137,6 +155,8 @@ export default function TrendingPage() {
   const [scheduleDay, setScheduleDay] = useState(
     new Date().toLocaleDateString("en-US", { weekday: "long" }).toLowerCase()
   );
+  const [pages, setPages] = useState({});
+  const [loadingMore, setLoadingMore] = useState({});
   const { season, year } = getCurrentSeason();
   const todayName = new Date().toLocaleDateString("en-US", { weekday: "long" }).toLowerCase();
 
@@ -210,6 +230,39 @@ export default function TrendingPage() {
 
   const currentLabel = CONTENT_TABS.find((t) => t.key === contentType)?.label || "";
 
+  // Load more handler for Jikan-based types
+  const handleLoadMore = async (dataKey, fetchFn) => {
+    const nextPage = (pages[dataKey] || 1) + 1;
+    setLoadingMore((p) => ({ ...p, [dataKey]: true }));
+    try {
+      const more = await fetchFn(nextPage);
+      if (more.length > 0) {
+        setD(dataKey, [...(data[dataKey] || []), ...more]);
+        setPages((p) => ({ ...p, [dataKey]: nextPage }));
+      }
+    } catch (e) {}
+    setLoadingMore((p) => ({ ...p, [dataKey]: false }));
+  };
+
+  // Map content type to load more function
+  const loadMoreFns = {
+    anime:      { trending: ["anime_trending", (p) => getTrendingAnime(p)], toprated: ["anime_toprated", (p) => getTopRatedAnime(p)] },
+    manga:      { trending: ["manga_trending", (p) => getTrendingManga(p)], toprated: ["manga_toprated", (p) => getTopRatedManga(p)] },
+    manhwa:     { trending: ["manhwa_trending", (p) => getTrendingManhwa(p)], toprated: ["manhwa_toprated", (p) => getTopRatedManhwa(p)] },
+    manhua:     { trending: ["manhua_trending", (p) => getTrendingManhua(p)], toprated: ["manhua_toprated", (p) => getTopRatedManhua(p)] },
+    lightnovel: { trending: ["ln_trending", (p) => getTrendingLightNovels(p)], toprated: ["ln_toprated", (p) => getTopRatedLightNovels(p)] },
+    webnovel:   { trending: ["wn_trending", (p) => getTrendingWebNovels(p)] },
+  };
+
+  const getLoadMore = (viewType) => {
+    const fns = loadMoreFns[contentType];
+    if (!fns) return null; // movies/shows use static list
+    const pair = viewType === "Trending" ? fns.trending : fns.toprated;
+    if (!pair) return null;
+    const [key, fn] = pair;
+    return { onLoadMore: () => handleLoadMore(key, fn), loadingMore: !!loadingMore[key] };
+  };
+
   return (
     <div className="max-w-5xl mx-auto px-4 py-8 fade-up">
       {/* Header */}
@@ -246,7 +299,8 @@ export default function TrendingPage() {
           <h2 className="text-lg font-bold text-white mb-4" style={{ fontFamily: "'Syne', sans-serif" }}>
             🔥 Trending {currentLabel}
           </h2>
-          <Grid items={get(trendingKey)} loading={isLoad(trendingKey)} onAdd={setModalItem} />
+          <Grid items={get(trendingKey)} loading={isLoad(trendingKey)} onAdd={setModalItem}
+        {...(getLoadMore("Trending") || {})} />
         </div>
       )}
 
@@ -256,7 +310,8 @@ export default function TrendingPage() {
           <h2 className="text-lg font-bold text-white mb-4" style={{ fontFamily: "'Syne', sans-serif" }}>
             ⭐ Top Rated {currentLabel} of All Time
           </h2>
-          <Grid items={get(topRatedKey)} loading={isLoad(topRatedKey)} onAdd={setModalItem} />
+          <Grid items={get(topRatedKey)} loading={isLoad(topRatedKey)} onAdd={setModalItem}
+        {...(getLoadMore("Top Rated") || {})} />
         </div>
       )}
 
@@ -266,7 +321,9 @@ export default function TrendingPage() {
           <h2 className="text-lg font-bold text-white mb-4" style={{ fontFamily: "'Syne', sans-serif" }}>
             📡 Currently Airing — {season} {year}
           </h2>
-          <Grid items={get("airing")} loading={isLoad("airing")} onAdd={setModalItem} />
+          <Grid items={get("airing")} loading={isLoad("airing")} onAdd={setModalItem}
+            onLoadMore={() => handleLoadMore("airing", (p) => getCurrentlyAiring(p))}
+            loadingMore={!!loadingMore["airing"]} />
         </div>
       )}
 
@@ -276,7 +333,9 @@ export default function TrendingPage() {
           <h2 className="text-lg font-bold text-white mb-4" style={{ fontFamily: "'Syne', sans-serif" }}>
             🗓️ Upcoming Next Season
           </h2>
-          <Grid items={get("upcoming")} loading={isLoad("upcoming")} onAdd={setModalItem} />
+          <Grid items={get("upcoming")} loading={isLoad("upcoming")} onAdd={setModalItem}
+            onLoadMore={() => handleLoadMore("upcoming", (p) => getUpcomingAnime(p))}
+            loadingMore={!!loadingMore["upcoming"]} />
         </div>
       )}
 

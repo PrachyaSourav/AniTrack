@@ -79,100 +79,140 @@ function normalizeOmdb(item, type) {
 
 // ─── Jikan helpers ────────────────────────────────────────────
 
-async function jikanList(path) {
-  const data = await jikanGet(path);
+async function jikanList(path, page = 1) {
+  const separator = path.includes("?") ? "&" : "?";
+  const data = await jikanGet(`${path}${separator}page=${page}`);
   return data?.data || [];
 }
 
 // ─── Anime ────────────────────────────────────────────────────
 
-export async function getTrendingAnime() {
-  return (await jikanList("/top/anime?filter=bypopularity&limit=12")).map((x) => normalizeAnime(x, "Anime"));
+export async function getTrendingAnime(page = 1) {
+  return (await jikanList("/top/anime?filter=bypopularity&limit=24", page)).map((x) => normalizeAnime(x, "Anime"));
 }
 
-export async function getTopRatedAnime() {
-  // Use /top/anime without filter for all-time top rated
-  return (await jikanList("/top/anime?limit=12")).map((x) => normalizeAnime(x, "Anime"));
+export async function getTopRatedAnime(page = 1) {
+  return (await jikanList("/top/anime?limit=24", page)).map((x) => normalizeAnime(x, "Anime"));
 }
 
-export async function getCurrentlyAiring() {
-  return (await jikanList("/seasons/now?limit=18")).map((x) => normalizeAnime(x, "Anime"));
+export async function getCurrentlyAiring(page = 1) {
+  return (await jikanList("/seasons/now?limit=24", page)).map((x) => normalizeAnime(x, "Anime"));
 }
 
-export async function getUpcomingAnime() {
-  return (await jikanList("/seasons/upcoming?limit=18")).map((x) => normalizeAnime(x, "Anime"));
+export async function getUpcomingAnime(page = 1) {
+  return (await jikanList("/seasons/upcoming?limit=24", page)).map((x) => normalizeAnime(x, "Anime"));
 }
 
 // ─── Manga ────────────────────────────────────────────────────
 
-export async function getTrendingManga() {
-  return (await jikanList("/top/manga?filter=bypopularity&limit=12&type=manga"))
+export async function getTrendingManga(page = 1) {
+  return (await jikanList("/top/manga?filter=bypopularity&limit=24&type=manga", page))
     .map((x) => normalizeManga(x, "Manga"));
 }
 
-export async function getTopRatedManga() {
-  return (await jikanList("/top/manga?limit=12&type=manga"))
+export async function getTopRatedManga(page = 1) {
+  return (await jikanList("/top/manga?limit=24&type=manga", page))
     .map((x) => normalizeManga(x, "Manga"));
 }
 
 // ─── Manhwa ───────────────────────────────────────────────────
 
-export async function getTrendingManhwa() {
-  return (await jikanList("/top/manga?filter=bypopularity&limit=12&type=manhwa"))
+export async function getTrendingManhwa(page = 1) {
+  return (await jikanList("/top/manga?filter=bypopularity&limit=24&type=manhwa", page))
     .map((x) => normalizeManga(x, "Manhwa"));
 }
 
-export async function getTopRatedManhwa() {
-  return (await jikanList("/top/manga?limit=12&type=manhwa"))
+export async function getTopRatedManhwa(page = 1) {
+  return (await jikanList("/top/manga?limit=24&type=manhwa", page))
     .map((x) => normalizeManga(x, "Manhwa"));
 }
 
 // ─── Manhua ───────────────────────────────────────────────────
 
-export async function getTrendingManhua() {
-  return (await jikanList("/top/manga?filter=bypopularity&limit=12&type=manhua"))
+export async function getTrendingManhua(page = 1) {
+  return (await jikanList("/top/manga?filter=bypopularity&limit=24&type=manhua", page))
     .map((x) => normalizeManga(x, "Manhua"));
 }
 
-export async function getTopRatedManhua() {
-  return (await jikanList("/top/manga?limit=12&type=manhua"))
+export async function getTopRatedManhua(page = 1) {
+  return (await jikanList("/top/manga?limit=24&type=manhua", page))
     .map((x) => normalizeManga(x, "Manhua"));
 }
 
 // ─── Light Novel ──────────────────────────────────────────────
 
-export async function getTrendingLightNovels() {
-  return (await jikanList("/top/manga?filter=bypopularity&limit=12&type=lightnovel"))
+export async function getTrendingLightNovels(page = 1) {
+  return (await jikanList("/top/manga?filter=bypopularity&limit=24&type=lightnovel", page))
     .map((x) => normalizeManga(x, "Light Novel"));
 }
 
-export async function getTopRatedLightNovels() {
-  return (await jikanList("/top/manga?limit=12&type=lightnovel"))
+export async function getTopRatedLightNovels(page = 1) {
+  return (await jikanList("/top/manga?limit=24&type=lightnovel", page))
     .map((x) => normalizeManga(x, "Light Novel"));
 }
 
 // ─── Web Novel ────────────────────────────────────────────────
 
-export async function getTrendingWebNovels() {
-  return (await jikanList("/top/manga?filter=bypopularity&limit=12&type=novel"))
+export async function getTrendingWebNovels(page = 1) {
+  return (await jikanList("/top/manga?filter=bypopularity&limit=24&type=novel", page))
     .map((x) => normalizeManga(x, "Web Novel"));
 }
 
 // ─── Movies (OMDB) ────────────────────────────────────────────
 
-const TOP_MOVIES = ["Inception", "Interstellar", "The Dark Knight", "Parasite", "Everything Everywhere", "Oppenheimer", "The Godfather", "Schindler's List", "Spirited Away", "Your Name"];
-const TOP_SHOWS = ["Breaking Bad", "Chernobyl", "Arcane", "The Last of Us", "Game of Thrones", "Sherlock", "Squid Game", "Cyberpunk Edgerunners", "Stranger Things", "The Boys"];
+const TOP_MOVIES = [
+  // Hollywood classics & blockbusters
+  "Inception", "Interstellar", "The Dark Knight", "Parasite", "Oppenheimer",
+  "The Godfather", "Schindler's List", "Pulp Fiction", "Fight Club", "Forrest Gump",
+  "The Shawshank Redemption", "Goodfellas", "The Matrix", "Avengers Endgame",
+  "Avatar", "Titanic", "Jurassic Park", "The Lion King", "Gladiator", "Braveheart",
+  // Animation & anime films
+  "Spirited Away", "Your Name", "A Silent Voice", "Demon Slayer Mugen Train",
+  "Princess Mononoke", "Akira", "Ghost in the Shell", "The Boy and the Heron",
+  // Recent hits
+  "Dune", "Top Gun Maverick", "Everything Everywhere All at Once",
+  "Spider-Man No Way Home", "Black Panther", "Joker", "1917", "Tenet",
+  "The Batman", "John Wick", "Mad Max Fury Road", "Blade Runner 2049",
+];
+
+const TOP_SHOWS = [
+  // Western hits
+  "Breaking Bad", "Chernobyl", "Game of Thrones", "Sherlock",
+  "Stranger Things", "The Boys", "Succession", "The Wire",
+  "House of Cards", "Better Call Saul", "Peaky Blinders", "Ozark",
+  "Dark", "Mindhunter", "Narcos", "Money Heist", "Black Mirror",
+  "Westworld", "True Detective", "The Crown",
+  // Anime & animation
+  "Arcane", "Cyberpunk Edgerunners", "Castlevania",
+  // K-Drama & Asian
+  "Squid Game", "The Last of Us", "Vincenzo", "Crash Landing on You",
+  // Sci-fi & fantasy
+  "The Mandalorian", "House of the Dragon", "The Witcher",
+  "Andor", "Severance", "Ted Lasso", "Fleabag",
+];
 
 async function omdbFetchDetails(titles, type) {
-  const results = await Promise.allSettled(
-    titles.map((t) =>
-      fetch(`https://www.omdbapi.com/?apikey=${OMDB_KEY}&t=${encodeURIComponent(t)}&type=${type === "Movie" ? "movie" : "series"}`)
-        .then((r) => r.json())
-    )
-  );
-  return results
-    .filter((r) => r.status === "fulfilled" && r.value.Response !== "False" && r.value.Poster && r.value.Poster !== "N/A")
-    .map((r) => normalizeOmdb(r.value, type));
+  // Fetch in batches of 10 to avoid rate limiting
+  const BATCH = 10;
+  const allResults = [];
+  for (let i = 0; i < titles.length; i += BATCH) {
+    const batch = titles.slice(i, i + BATCH);
+    const results = await Promise.allSettled(
+      batch.map((t) =>
+        fetch(`https://www.omdbapi.com/?apikey=${OMDB_KEY}&t=${encodeURIComponent(t)}&type=${type === "Movie" ? "movie" : "series"}`)
+          .then((r) => r.json())
+      )
+    );
+    results.forEach((r) => {
+      if (r.status === "fulfilled" && r.value.Response !== "False" &&
+          r.value.Poster && r.value.Poster !== "N/A" && r.value.Poster.startsWith("http")) {
+        allResults.push(normalizeOmdb(r.value, type));
+      }
+    });
+    // Small delay between batches to respect rate limit
+    if (i + BATCH < titles.length) await new Promise((r) => setTimeout(r, 300));
+  }
+  return allResults;
 }
 
 export async function getTrendingMovies() {
