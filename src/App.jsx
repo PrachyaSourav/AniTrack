@@ -9,7 +9,6 @@ import MyListPage from "./pages/MyListPage";
 import DashboardPage from "./pages/DashboardPage";
 import ProfilePage from "./pages/ProfilePage";
 import TrendingPage from "./pages/TrendingPage";
-import TrendingPage from "./pages/TrendingPage";
 
 function AppInner() {
   const { user, loading } = useAuth();
