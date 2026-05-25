@@ -1,6 +1,7 @@
 import React from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import { ThemeProvider } from "./context/ThemeContext";
 import { ListProvider } from "./context/ListContext";
 import { ProfileProvider } from "./context/ProfileContext";
 import { NotificationProvider } from "./context/NotificationContext";
@@ -14,6 +15,7 @@ import TrendingPage from "./pages/TrendingPage";
 import SocialPage from "./pages/SocialPage";
 import RecommendationsPage from "./pages/RecommendationsPage";
 import ImportPage from "./pages/ImportPage";
+import BottomNav from "./components/BottomNav";
 
 function AppInner() {
   const { user, loading } = useAuth();
@@ -36,7 +38,7 @@ function AppInner() {
           <BrowserRouter>
             <div className="min-h-screen bg-surface">
               <Navbar />
-              <main>
+              <main className="pb-16 md:pb-0">
                 <Routes>
                   <Route path="/" element={<DiscoverPage />} />
                   <Route path="/mylist" element={<MyListPage />} />
@@ -48,6 +50,7 @@ function AppInner() {
                   <Route path="/import" element={<ImportPage />} />
                 </Routes>
               </main>
+              <BottomNav />
             </div>
           </BrowserRouter>
         </ListProvider>
@@ -58,8 +61,10 @@ function AppInner() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppInner />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <AppInner />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

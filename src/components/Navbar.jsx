@@ -4,12 +4,14 @@ import { useList } from "../context/ListContext";
 import { useAuth } from "../context/AuthContext";
 import { useProfile } from "../context/ProfileContext";
 import NotificationsPanel from "./NotificationsPanel";
+import { useTheme } from "../context/ThemeContext";
 
 export default function Navbar() {
   const { list } = useList();
   const { user, signOut } = useAuth();
   const { profile } = useProfile();
   const [showMenu, setShowMenu] = useState(false);
+  const { theme, toggleTheme } = useTheme();
   const watching = list.filter((x) => x.status === "Watching").length;
   const avatar = (profile?.display_name || user?.email || "U")[0].toUpperCase();
 
@@ -37,6 +39,13 @@ export default function Navbar() {
 
         {/* Right side */}
         <div className="flex items-center gap-2 flex-shrink-0">
+          {/* Theme toggle */}
+          <button onClick={toggleTheme}
+            className="w-8 h-8 rounded-full flex items-center justify-center text-sm hover:bg-white/10 transition-all duration-150"
+            style={{ color: 'var(--text3)' }}
+            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
           <NotificationsPanel />
 
           {/* Profile dropdown */}
