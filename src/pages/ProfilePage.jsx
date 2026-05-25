@@ -140,6 +140,14 @@ export default function ProfilePage() {
             </div>
             <span className="text-white/30">→</span>
           </button>
+          <button onClick={() => navigate("/notifications/email")}
+            className="flex items-center justify-between p-3 bg-surface-3 rounded-xl hover:bg-white/5 transition-colors text-left">
+            <div>
+              <p className="text-sm font-medium text-white/90">Email notifications</p>
+              <p className="text-xs text-white/40">Manage what emails you receive</p>
+            </div>
+            <span className="text-white/30">→</span>
+          </button>
         </div>
       </div>
 

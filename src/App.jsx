@@ -16,6 +16,8 @@ import SocialPage from "./pages/SocialPage";
 import RecommendationsPage from "./pages/RecommendationsPage";
 import ImportPage from "./pages/ImportPage";
 import BottomNav from "./components/BottomNav";
+import InstallPrompt from "./components/InstallPrompt";
+import EmailNotificationsPage from "./pages/EmailNotificationsPage";
 
 function AppInner() {
   const { user, loading } = useAuth();
@@ -48,9 +50,11 @@ function AppInner() {
                   <Route path="/social" element={<SocialPage />} />
                   <Route path="/foryou" element={<RecommendationsPage />} />
                   <Route path="/import" element={<ImportPage />} />
+              <Route path="/notifications/email" element={<EmailNotificationsPage />} />
                 </Routes>
               </main>
               <BottomNav />
+              <InstallPrompt />
             </div>
           </BrowserRouter>
         </ListProvider>
