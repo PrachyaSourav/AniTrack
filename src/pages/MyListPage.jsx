@@ -3,7 +3,7 @@ import { useList } from "../context/ListContext";
 import ListItem from "../components/ListItem";
 import AddEditModal from "../components/AddEditModal";
 const STATUS_FILTERS=["All","Watching","Completed","Plan to Watch","On Hold","Dropped"];
-const TYPE_FILTERS=["All Types","Anime","Manga","Manhwa","Manhua","Donghua","Light Novel","Web Novel","K-Drama","Movie","TV Show"];
+const TYPE_FILTERS=["All Types","Anime","Manga","Manhwa","Manhua","Donghua","Light Novel","Web Novel","K-Drama","C-Drama","J-Drama","Thai Drama","Movie","TV Show"];
 const SORT_OPTIONS=[{value:"addedAt",label:"Recently added"},{value:"rating",label:"Rating"},{value:"title",label:"Title A–Z"},{value:"progress",label:"Progress"}];
 export default function MyListPage() {
   const { list } = useList();
