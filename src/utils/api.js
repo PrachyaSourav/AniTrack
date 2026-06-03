@@ -184,89 +184,80 @@ async function omdbSearch(q, omdbType, appType, fallback) {
     return details.filter(r=>r.status==="fulfilled"&&r.value.Response!=="False"&&r.value.Poster&&r.value.Poster!=="N/A"&&r.value.Poster.startsWith("http")).map(r=>fromOmdb(r.value,appType));
   } catch(e){return[];}
 }
-async function searchKDrama(query) {
+// ─── Drama search using OMDB with curated defaults ───────────
+async function searchDramaOMDB(query, type, defaults) {
   try {
-    const path = query.trim()
-      ? `/search?q=${encodeURIComponent(query)}`
-      : `/search?q=korean+drama`;
-    const data = await mdlFetch(path);
-    const results = data?.results || data?.dramas || [];
-    if (results.length > 0) {
-      return results.slice(0, 15).map((x) => fromMDL(x, "K-Drama"));
-    }
-  } catch (e) { console.error("MDL K-Drama error:", e); }
-  // Fallback to OMDB if MDL fails
-  return searchKDramaFallback(query);
-}
-
-async function searchKDramaFallback(query) {
-  const DEFAULTS = ["Squid Game", "Crash Landing on You", "Guardian Lonely Great God", "Vincenzo", "Descendants of the Sun", "My Love from the Star", "Itaewon Class"];
-  try {
-    const searches = query.trim() ? [query] : DEFAULTS;
-    const allResults = await Promise.allSettled(
-      searches.map((q) =>
-        fetch(`${OMDB}/?apikey=${OMDB_KEY}&s=${encodeURIComponent(q)}&type=series`).then((r) => r.json())
-      )
-    );
-    const imdbIds = [];
-    allResults.forEach((r) => {
-      if (r.status === "fulfilled" && r.value.Response !== "False") {
-        (r.value.Search || []).slice(0, query.trim() ? 10 : 3).forEach((x) => {
-          if (!imdbIds.includes(x.imdbID)) imdbIds.push(x.imdbID);
-        });
+    if (query.trim()) {
+      // Direct search for specific title
+      const res = await fetch(`${OMDB}/?apikey=${OMDB_KEY}&s=${encodeURIComponent(query)}&type=series`);
+      const json = await res.json();
+      if (json.Response !== "False" && json.Search?.length > 0) {
+        const details = await Promise.allSettled(
+          json.Search.slice(0, 10).map((item) =>
+            fetch(`${OMDB}/?apikey=${OMDB_KEY}&i=${item.imdbID}&plot=short`).then((r) => r.json())
+          )
+        );
+        const results = details
+          .filter((r) => r.status === "fulfilled" && r.value.Response !== "False" &&
+            r.value.Poster && r.value.Poster !== "N/A" && r.value.Poster.startsWith("http"))
+          .map((r) => fromOmdb(r.value, type));
+        if (results.length > 0) return results;
       }
-    });
-    const details = await Promise.allSettled(
-      imdbIds.slice(0, 12).map((id) =>
-        fetch(`${OMDB}/?apikey=${OMDB_KEY}&i=${id}&plot=short`).then((r) => r.json())
+    }
+    // Default — fetch curated list
+    const results = await Promise.allSettled(
+      defaults.map((t) =>
+        fetch(`${OMDB}/?apikey=${OMDB_KEY}&t=${encodeURIComponent(t)}&type=series`)
+          .then((r) => r.json())
       )
     );
-    return details
-      .filter((r) => {
-        if (r.status !== "fulfilled") return false;
-        const d = r.value;
-        if (d.Response === "False") return false;
-        const hasPoster = d.Poster && d.Poster !== "N/A" && d.Poster.startsWith("http");
-        if (!hasPoster) return false;
-        if (query.trim()) return true;
-        return d.Country?.includes("South Korea") || d.Language?.includes("Korean");
-      })
-      .map((r) => fromOmdb(r.value, "K-Drama"));
+    return results
+      .filter((r) => r.status === "fulfilled" && r.value.Response !== "False" &&
+        r.value.Poster && r.value.Poster !== "N/A" && r.value.Poster.startsWith("http"))
+      .map((r) => fromOmdb(r.value, type));
   } catch (e) { return []; }
 }
 
+const K_DRAMA_DEFAULTS = [
+  "Squid Game", "Crash Landing on You", "Goblin", "Vincenzo",
+  "Descendants of the Sun", "My Love from the Star", "Itaewon Class",
+  "Extraordinary Attorney Woo", "Twenty Five Twenty One", "Hospital Playlist",
+  "Reply 1988", "Signal", "My Mister", "Misaeng", "While You Were Sleeping",
+];
+
+const C_DRAMA_DEFAULTS = [
+  "Nirvana in Fire", "The Untamed", "Story of Yanxi Palace",
+  "Love Between Fairy and Devil", "Ashes of Love", "Ancient Love Poetry",
+  "Word of Honor", "The Bad Kids", "Go Ahead", "Nothing But Thirty",
+  "Joy of Life", "Burning Ice", "Hidden Love", "You Are My Glory",
+];
+
+const J_DRAMA_DEFAULTS = [
+  "Hana Yori Dango", "Nodame Cantabile", "GTO", "Liar Game",
+  "Mother", "Unnatural", "MIU404", "Good Doctor Japan",
+  "Midnight Diner", "Legal High", "Last Friends", "Hana Kimi",
+];
+
+const THAI_DRAMA_DEFAULTS = [
+  "2gether The Series", "Until We Meet Again", "TharnType",
+  "He's Coming To Me", "Theory of Love", "Dark Blue Kiss",
+  "Girl From Nowhere", "Bad Buddy", "Lovely Writer",
+];
+
+async function searchKDrama(query) {
+  return searchDramaOMDB(query, "K-Drama", K_DRAMA_DEFAULTS);
+}
+
 async function searchCDrama(query) {
-  try {
-    const q = query.trim() || "chinese drama";
-    const data = await mdlFetch(`/search?q=${encodeURIComponent(q)}`);
-    const results = (data?.results || data?.dramas || [])
-      .filter((x) => x.country === "China" || (x.title || "").toLowerCase().includes("chinese") || !query.trim());
-    if (results.length > 0) return results.slice(0, 15).map((x) => fromMDL(x, "C-Drama"));
-  } catch (e) {}
-  // Fallback
-  return omdbSearch(query || "chinese drama", "series", "C-Drama", "chinese drama");
+  return searchDramaOMDB(query, "C-Drama", C_DRAMA_DEFAULTS);
 }
 
 async function searchJDrama(query) {
-  try {
-    const q = query.trim() || "japanese drama";
-    const data = await mdlFetch(`/search?q=${encodeURIComponent(q)}`);
-    const results = (data?.results || data?.dramas || [])
-      .filter((x) => x.country === "Japan" || !query.trim());
-    if (results.length > 0) return results.slice(0, 15).map((x) => fromMDL(x, "J-Drama"));
-  } catch (e) {}
-  return omdbSearch(query || "japanese drama", "series", "J-Drama", "japanese drama");
+  return searchDramaOMDB(query, "J-Drama", J_DRAMA_DEFAULTS);
 }
 
 async function searchThaiDrama(query) {
-  try {
-    const q = query.trim() || "thai drama";
-    const data = await mdlFetch(`/search?q=${encodeURIComponent(q)}`);
-    const results = (data?.results || data?.dramas || [])
-      .filter((x) => x.country === "Thailand" || !query.trim());
-    if (results.length > 0) return results.slice(0, 15).map((x) => fromMDL(x, "Thai Drama"));
-  } catch (e) {}
-  return omdbSearch(query || "thai drama", "series", "Thai Drama", "thai drama");
+  return searchDramaOMDB(query, "Thai Drama", THAI_DRAMA_DEFAULTS);
 }
 
 export async function searchMedia(query, type) {
@@ -292,15 +283,15 @@ export function getAllTypes() {
   return [
     {value:"anime",     label:"Anime",       emoji:"🎌"},
     {value:"manga",     label:"Manga",       emoji:"📚"},
-    {value:"manhwa",    label:"Manhwa",      emoji:"🇰🇷"},
-    {value:"manhua",    label:"Manhua",      emoji:"🇨🇳"},
+    {value:"manhwa",    label:"Manhwa",      emoji:"KR"},
+    {value:"manhua",    label:"Manhua",      emoji:"CN"},
     {value:"donghua",   label:"Donghua",     emoji:"🐉"},
     {value:"lightnovel",label:"Light Novel", emoji:"📖"},
     {value:"webnovel",  label:"Web Novel",   emoji:"✍️"},
-    {value:"kdrama",    label:"K-Drama",     emoji:"🇰🇷"},
-    {value:"cdrama",    label:"C-Drama",     emoji:"🇨🇳"},
-    {value:"jdrama",    label:"J-Drama",     emoji:"🇯🇵"},
-    {value:"thaidrama", label:"Thai Drama",  emoji:"🇹🇭"},
+    {value:"kdrama",    label:"K-Drama",     emoji:"KR"},
+    {value:"cdrama",    label:"C-Drama",     emoji:"CN"},
+    {value:"jdrama",    label:"J-Drama",     emoji:"JP"},
+    {value:"thaidrama", label:"Thai Drama",  emoji:"TH"},
     {value:"movie",     label:"Movies",      emoji:"🎬"},
     {value:"show",      label:"TV Shows",    emoji:"📺"},
   ];
