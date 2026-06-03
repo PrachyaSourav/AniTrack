@@ -79,7 +79,7 @@ export default function DiscoverPage() {
     handleSearch(query, type, page + 1);
   };
 
-  // AI recommendation handler
+  // AI recommendation handler — calls our Vercel serverless function
   const handleAIRecommend = async () => {
     if (!aiQuery.trim()) return;
     setAILoading(true);
@@ -87,45 +87,41 @@ export default function DiscoverPage() {
     setAIResults([]);
 
     try {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
+      // Call our serverless proxy (not Anthropic directly — CORS blocked in browser)
+      const response = await fetch("/api/recommend", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1000,
-          messages: [{
-            role: "user",
-            content: `You are an anime, manga and drama recommendation expert. 
-The user is looking for: "${aiQuery}"
-
-Based on this, suggest exactly 8 titles they would enjoy. 
-Return ONLY a JSON array with no other text, markdown, or explanation.
-Each item must have: title (string), type (one of: Anime, Manga, K-Drama, C-Drama, J-Drama, Movie, TV Show), reason (one sentence why they'd like it)
-
-Example format:
-[{"title":"Attack on Titan","type":"Anime","reason":"Epic action with deep story"},{"title":"Vinland Saga","type":"Anime","reason":"Historical action drama similar in tone"}]`
-          }]
-        }),
+        body: JSON.stringify({ query: aiQuery }),
       });
 
       const data = await response.json();
-      const text = data.content?.[0]?.text || "";
-      const clean = text.replace(/```json|```/g, "").trim();
-      const suggestions = JSON.parse(clean);
+      if (!response.ok || data.error) throw new Error(data.error || "API error");
+
+      const suggestions = data.suggestions || [];
 
       // Search for each suggestion to get real cover images
+      const TYPE_MAP = {
+        "Anime": "anime", "Manga": "manga", "K-Drama": "kdrama",
+        "C-Drama": "cdrama", "J-Drama": "jdrama", "Thai Drama": "thaidrama",
+        "Movie": "movie", "TV Show": "show",
+      };
+
       const withImages = await Promise.allSettled(
         suggestions.map(async (s) => {
-          const typeMap = {
-            "Anime": "anime", "Manga": "manga", "K-Drama": "kdrama",
-            "C-Drama": "cdrama", "J-Drama": "jdrama", "Movie": "movie", "TV Show": "show",
-          };
-          const results = await searchMedia(s.title, typeMap[s.type] || "anime", 1);
+          const searchType = TYPE_MAP[s.type] || "anime";
+          const results = await searchMedia(s.title, searchType, 1);
           const match = results.find((r) =>
             r.title?.toLowerCase().includes(s.title.toLowerCase()) ||
-            s.title.toLowerCase().includes(r.title?.toLowerCase())
+            s.title.toLowerCase().includes((r.title || "").toLowerCase())
           ) || results[0];
-          return match ? { ...match, aiReason: s.reason, type: s.type } : null;
+          return match ? { ...match, aiReason: s.reason, type: s.type } : {
+            id: Math.random(),
+            title: s.title,
+            type: s.type,
+            img: "",
+            score: 0,
+            aiReason: s.reason,
+          };
         })
       );
 
@@ -136,6 +132,7 @@ Example format:
       setAIResults(filtered);
       if (filtered.length === 0) setAIError("Couldn't find results. Try a different description.");
     } catch (e) {
+      console.error("AI error:", e);
       setAIError("AI recommendation failed. Please try again.");
     }
     setAILoading(false);
