@@ -95,7 +95,10 @@ export default function DiscoverPage() {
       });
 
       const data = await response.json();
-      if (!response.ok || data.error) throw new Error(data.error || "API error");
+      if (!response.ok || data.error) {
+        const msg = data.debug || data.detail || data.error || "API error";
+        throw new Error(msg);
+      }
 
       const suggestions = data.suggestions || [];
 
@@ -133,7 +136,7 @@ export default function DiscoverPage() {
       if (filtered.length === 0) setAIError("Couldn't find results. Try a different description.");
     } catch (e) {
       console.error("AI error:", e);
-      setAIError("AI recommendation failed. Please try again.");
+      setAIError(`Error: ${e.message}. Check browser console for details.`);
     }
     setAILoading(false);
   };

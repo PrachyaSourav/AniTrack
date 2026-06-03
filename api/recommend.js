@@ -1,4 +1,4 @@
-// Vercel serverless function — proxies Anthropic API for AI recommendations
+// Vercel serverless function — AI recommendations using Anthropic API
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -9,6 +9,14 @@ export default async function handler(req, res) {
 
   const { query } = req.body || {};
   if (!query) return res.status(400).json({ error: "Missing query" });
+
+  // Check API key exists
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return res.status(500).json({ 
+      error: "API key not configured",
+      debug: "ANTHROPIC_API_KEY environment variable is missing in Vercel settings"
+    });
+  }
 
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -34,12 +42,34 @@ Example: [{"title":"Attack on Titan","type":"Anime","reason":"Epic action with d
       }),
     });
 
+    if (!response.ok) {
+      const errText = await response.text();
+      return res.status(response.status).json({ 
+        error: "Anthropic API error", 
+        status: response.status,
+        detail: errText 
+      });
+    }
+
     const data = await response.json();
     const text = data.content?.[0]?.text || "[]";
+    
+    // Clean and parse JSON
     const clean = text.replace(/```json|```/g, "").trim();
-    const suggestions = JSON.parse(clean);
+    let suggestions;
+    try {
+      suggestions = JSON.parse(clean);
+    } catch {
+      // Try to extract JSON array from text
+      const match = clean.match(/\[[\s\S]*\]/);
+      suggestions = match ? JSON.parse(match[0]) : [];
+    }
+
     return res.status(200).json({ suggestions });
   } catch (error) {
-    return res.status(500).json({ error: "AI failed", message: error.message });
+    return res.status(500).json({ 
+      error: "Server error", 
+      message: error.message 
+    });
   }
 }
