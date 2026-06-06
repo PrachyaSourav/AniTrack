@@ -1,14 +1,9 @@
-// Vercel serverless function — proxies Jikan API
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET");
-
   const { path } = req.query;
-  if (!path) return res.status(400).json({ error: "Missing path parameter" });
-
+  if (!path) return res.status(400).json({ error: "Missing path" });
   try {
-    const url = `https://api.jikan.moe/v4${path}`;
-    const response = await fetch(url, {
+    const response = await fetch(`https://api.jikan.moe/v4${path}`, {
       headers: { "Accept": "application/json", "User-Agent": "AniTrack/1.0" },
     });
     if (!response.ok) return res.status(response.status).json({ error: "Jikan API error" });

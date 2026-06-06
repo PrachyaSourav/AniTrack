@@ -1,4 +1,18 @@
 {
+  "functions": {
+    "api/recommend.js": {
+      "memory": 256,
+      "maxDuration": 30
+    },
+    "api/jikan.js": {
+      "memory": 256,
+      "maxDuration": 30
+    },
+    "api/mdl.js": {
+      "memory": 256,
+      "maxDuration": 30
+    }
+  },
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" }
   ]
