@@ -1,0 +1,1 @@
+module.exports={content:["./src/**/*.{js,jsx,ts,tsx}"],theme:{extend:{fontFamily:{sans:["'DM Sans'","sans-serif"],display:["'Syne'","sans-serif"]},colors:{accent:{DEFAULT:"var(--accent)",dark:"var(--accent-d)",light:"var(--accent-l)"},surface:{DEFAULT:"var(--bg)",2:"var(--bg2)",3:"var(--bg3)",4:"var(--bg4)"},border:"var(--border)","border-hover":"var(--border2)"}}},plugins:[]};
